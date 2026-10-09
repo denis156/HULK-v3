@@ -107,12 +107,17 @@ def launch_client(args: argparse.Namespace):
             target=lambda: asyncio.new_event_loop().run_until_complete(
                 Comms(root_ip, root_port).monitor()
             ),
+            daemon=True,
         ) for _ in range(num_processes)
     ]
     for thread in threads:
         thread.start()
-    for thread in threads:
-        thread.join()
+    try:
+        for thread in threads:
+            thread.join()
+    except KeyboardInterrupt:
+        LOGGER.warning("Shutting down Hulk client.")
+        sys.exit(0)
 
 
 def create_parser() -> Tuple[

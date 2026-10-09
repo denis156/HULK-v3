@@ -148,10 +148,13 @@ class WinNamedPipeHandler(logging.StreamHandler):
         self.message_queue = deque()
         self.pipe = None
         if wait_for_pipe:
-            while not self.pipe:
-                self.connect()
-                if not self.pipe:
-                    time.sleep(0.1)
+            try:
+                while not self.pipe:
+                    self.connect()
+                    if not self.pipe:
+                        time.sleep(0.1)
+            except KeyboardInterrupt:
+                sys.exit(0)
             sys.stdout.buffer.write(
                 (
                     chalk.green(
@@ -266,10 +269,13 @@ class UnixNamedPipeHandler(logging.StreamHandler):
         self.message_queue = deque()
         self.pipe: socket.socket = None
         if wait_for_pipe:
-            while not self.pipe:
-                self.connect()
-                if not self.pipe:
-                    time.sleep(0.1)
+            try:
+                while not self.pipe:
+                    self.connect()
+                    if not self.pipe:
+                        time.sleep(0.1)
+            except KeyboardInterrupt:
+                sys.exit(0)
             sys.stdout.buffer.write(
                 (
                     chalk.green(

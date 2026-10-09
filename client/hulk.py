@@ -20,6 +20,7 @@ import socket
 import string
 import sys
 import threading
+import time
 from typing import TYPE_CHECKING, List, Optional, Tuple
 from urllib.parse import urljoin
 
@@ -315,15 +316,18 @@ class Comms:
         """
         if self._root_server is not None:
             return self._root_server
-        root = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         LOGGER.info("Trying to establish connection with Root server.")
         while True:
+            root = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             try:
-                with contextlib.suppress(ConnectionError):
-                    root.connect((self.root_ip, self.root_port))
-                    break
+                root.connect((self.root_ip, self.root_port))
+                break
             except KeyboardInterrupt:
+                root.close()
                 sys.exit(0)
+            except OSError:
+                root.close()
+                time.sleep(1)
         self._root_server = root
         FILTER.update_address(self.address)
         LOGGER.info(
@@ -446,7 +450,8 @@ def modify_parser(parser: argparse.ArgumentParser):
     parser.add_argument(
         '-p', '--root_port',
         help='Port where Hulk Server is running.',
-        default=6666
+        default=6666,
+        type=int
     )
     parser.add_argument(
         '-s', '--stealth',
