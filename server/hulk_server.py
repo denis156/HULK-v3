@@ -100,7 +100,8 @@ class HulkServer:
                 self._handle_exceptionals(exceptional)
         except KeyboardInterrupt:
             self.target = self._get_new_target()
-            self.launch()
+            if self.inputs:
+                self.launch()
 
     def _get_new_target(self):
         """
@@ -109,7 +110,10 @@ class HulkServer:
         :return: The new target.
         :rtype: str
         """
-        target = input("Enter the next url (or 'quit' to exit):\n")
+        try:
+            target = input("Enter the next url (or 'quit' to exit):\n")
+        except (EOFError, KeyboardInterrupt):
+            target = "quit"
         if target.lower() in {
             "q", "quit", "exit"
         }:
