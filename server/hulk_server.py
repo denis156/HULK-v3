@@ -307,6 +307,25 @@ class HulkServer:
                 ))
         self.target = None
 
+    def _remove_bot(self, bot: socket.socket):
+        """
+        Removes a bot from the server's tracking structures and closes it.
+
+        :param bot: The bot socket to remove.
+        :type bot: socket.socket
+        """
+        if bot in self.outputs:
+            self.outputs.remove(bot)
+        if bot in self.inputs:
+            self.inputs.remove(bot)
+        if bot in self.on_standby:
+            self.on_standby.remove(bot)
+        self.message_queues.pop(bot, None)
+        try:
+            bot.close()
+        except OSError:
+            pass
+
     def _handle_writables(self, writable: List[socket.socket]):
         """
         Handles the writable sockets.
@@ -317,55 +336,58 @@ class HulkServer:
             try:
                 ip_addr, port = elem.getpeername()
                 hostname = socket.gethostbyaddr(ip_addr)[0]
+            except OSError:
+                # The peer has gone away; drop the dead socket.
+                self._remove_bot(elem)
+                continue
+            try:
                 if elem not in self.message_queues:
                     continue
                 next_msg = self.message_queues[elem].get_nowait()
             except queue.Empty:
                 if elem in self.outputs:
                     self.outputs.remove(elem)
-            else:
-                if next_msg is None:
-                    continue
-                try:
-                    elem.sendall(next_msg.encode())
-                    msg_type = (
-                        "Target"
-                        if next_msg == self.target
-                        else "Command"
-                    )
-                    LOGGER.outgoing(
-                        "Sending %s <%s> to [%s:%d]",
-                        msg_type, next_msg, hostname, port
-                    )
-                except (
-                    ConnectionAbortedError,
-                    ConnectionRefusedError,
-                    ConnectionResetError,
-                    socket.error
-                ) as exp:
-                    error_msg = exp
-                    if isinstance(exp, ConnectionRefusedError):
-                        error_msg = ErrorMessages.CONNECTION_REFUSED
-                    elif isinstance(exp, ConnectionResetError):
-                        error_msg = ErrorMessages.CONNECTION_RESET
-                    elif isinstance(
-                        exp,
-                        (ConnectionAbortedError, socket.error)
-                    ):
-                        error_msg = ErrorMessages.CONNECTION_ABORTED
-                    LOGGER.error(
-                        'Connection Error <%s> by [%s:%d]',
-                        error_msg, hostname, port
-                    )
-                    self.inputs.remove(elem)
-                    self.message_queues.pop(elem, None)
-                    self.outputs.remove(elem)
-                except Exception as exp:  # pylint: disable=broad-except
-                    LOGGER.error(
-                        'Unknown Error %s by [%s:%d]',
-                        exp, hostname, port
-                    )
-                    self.outputs.remove(elem)
+                continue
+            if next_msg is None:
+                continue
+            try:
+                elem.sendall(next_msg.encode())
+                msg_type = (
+                    "Target"
+                    if next_msg == self.target
+                    else "Command"
+                )
+                LOGGER.outgoing(
+                    "Sending %s <%s> to [%s:%d]",
+                    msg_type, next_msg, hostname, port
+                )
+            except (
+                ConnectionAbortedError,
+                ConnectionRefusedError,
+                ConnectionResetError,
+                socket.error
+            ) as exp:
+                error_msg = exp
+                if isinstance(exp, ConnectionRefusedError):
+                    error_msg = ErrorMessages.CONNECTION_REFUSED
+                elif isinstance(exp, ConnectionResetError):
+                    error_msg = ErrorMessages.CONNECTION_RESET
+                elif isinstance(
+                    exp,
+                    (ConnectionAbortedError, socket.error)
+                ):
+                    error_msg = ErrorMessages.CONNECTION_ABORTED
+                LOGGER.error(
+                    'Connection Error <%s> by [%s:%d]',
+                    error_msg, hostname, port
+                )
+                self._remove_bot(elem)
+            except Exception as exp:  # pylint: disable=broad-except
+                LOGGER.error(
+                    'Unknown Error %s by [%s:%d]',
+                    exp, hostname, port
+                )
+                self._remove_bot(elem)
 
     def _handle_exceptionals(self, exceptional: List[socket.socket]):
         """
